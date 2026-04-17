@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Book Reader</title>
-    <script src="pdfjs/pdf.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -459,20 +458,6 @@
             to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
 
-        .storage-warning {
-            background: #f39c12;
-            color: #1a1a2e;
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .storage-warning.show {
-            display: block;
-        }
-
         .loading {
             display: flex;
             align-items: center;
@@ -501,9 +486,6 @@
         <main>
             <div id="library-view" class="view active">
                 <div class="upload-section">
-                    <div class="storage-warning" id="storage-warning">
-                        Storage is nearly full. Consider deleting some books to free up space.
-                    </div>
                     <div class="upload-area" id="upload-area">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -566,9 +548,6 @@
     <div class="error-toast" id="error-toast"></div>
 
     <script>
-        const STORAGE_KEY = 'pdf_book_reader_data';
-        const MAX_STORAGE_MB = 50;
-
         let books = [];
         let currentBook = null;
         let currentPage = 1;
@@ -589,7 +568,6 @@
         const closeReaderBtn = document.getElementById('close-reader');
         const pdfCanvas = document.getElementById('pdf-canvas');
         const errorToast = document.getElementById('error-toast');
-        const storageWarning = document.getElementById('storage-warning');
 
         async function loadPdfJs() {
             if (typeof pdfjsLib !== 'undefined') {
@@ -624,30 +602,6 @@
                     showError('Failed to load PDF library');
                 }
             }
-        }
-
-        function loadBooks() {
-            try {
-                const data = localStorage.getItem(STORAGE_KEY);
-                books = data ? JSON.parse(data) : [];
-                updateStorageWarning();
-            } catch (e) {
-                books = [];
-            }
-        }
-
-        function saveBooks() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
-                updateStorageWarning();
-            } catch (e) {
-                showError('Storage is full. Please delete some books.');
-            }
-        }
-
-        function updateStorageWarning() {
-            const used = new Blob([JSON.stringify(books)]).size / (1024 * 1024);
-            storageWarning.classList.toggle('show', used > MAX_STORAGE_MB * 0.8);
         }
 
         function showError(message) {
@@ -685,7 +639,7 @@
                         const book = {
                             id: generateId(),
                             title: getFileName(file),
-                            pdfData: Array.from(typedarray),
+                            pdfData: typedarray,
                             thumbnail: thumbnail,
                             addedDate: Date.now(),
                             lastRead: null,
@@ -745,7 +699,6 @@
                 }
             }
             
-            saveBooks();
             renderLibrary();
             showView('library');
         }
@@ -754,6 +707,7 @@
         
         fileInput.addEventListener('change', async (e) => {
             await handleFiles(e.target.files);
+            e.target.value = '';
         });
 
         uploadArea.addEventListener('dragover', (e) => {
@@ -765,10 +719,10 @@
             uploadArea.classList.remove('dragover');
         });
 
-        uploadArea.addEventListener('drop', (e) => {
+        uploadArea.addEventListener('drop', async (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
-            handleFiles(e.dataTransfer.files);
+            await handleFiles(e.dataTransfer.files);
         });
 
         document.querySelectorAll('.tab').forEach(tab => {
@@ -832,7 +786,9 @@
             if (historyBooks.length === 0) {
                 empty.style.display = 'block';
                 historyList.innerHTML = '';
-                historyList.appendChild(empty.cloneNode(true));
+                const emptyClone = empty.cloneNode(true);
+                emptyClone.id = 'empty-history';
+                historyList.appendChild(emptyClone);
                 return;
             }
             
@@ -870,7 +826,6 @@
 
         function deleteBook(id) {
             books = books.filter(b => b.id !== id);
-            saveBooks();
             renderHistory();
         }
 
@@ -885,8 +840,7 @@
             currentPage = book.currentPage || 1;
             
             try {
-                const pdfData = new Uint8Array(book.pdfData);
-                pdfDoc = await pdfjsLib.getDocument(pdfData).promise;
+                pdfDoc = await pdfjsLib.getDocument(book.pdfData).promise;
                 totalPages = pdfDoc.numPages;
                 
                 readerTitle.textContent = book.title;
@@ -936,7 +890,6 @@
                 
                 currentBook.currentPage = pageNum;
                 currentBook.lastRead = Date.now();
-                saveBooks();
             } catch (e) {
                 console.error('Error rendering page:', e);
                 showError('Error rendering page: ' + e.message);
@@ -984,7 +937,6 @@
             }
         });
 
-        loadBooks();
         loadPdfJs();
         renderLibrary();
     </script>
