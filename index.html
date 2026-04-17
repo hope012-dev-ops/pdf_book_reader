@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Book Reader</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="pdfjs/pdf.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -159,9 +159,10 @@
             overflow: hidden;
         }
 
-        .book-cover canvas {
+        .book-cover img {
             max-width: 100%;
             max-height: 100%;
+            object-fit: contain;
         }
 
         .book-cover .placeholder {
@@ -283,7 +284,7 @@
             color: #444;
         }
 
-        .fileReader {
+        .reader {
             position: fixed;
             top: 0;
             left: 0;
@@ -295,11 +296,11 @@
             z-index: 1000;
         }
 
-        .fileReader.open {
+        .reader.open {
             display: flex;
         }
 
-        .fileReader-header {
+        .reader-header {
             background: #16213e;
             padding: 12px 24px;
             display: flex;
@@ -308,7 +309,7 @@
             border-bottom: 2px solid #0f3460;
         }
 
-        .fileReader-title {
+        .reader-title {
             font-size: 18px;
             font-weight: 600;
             max-width: 300px;
@@ -317,7 +318,7 @@
             text-overflow: ellipsis;
         }
 
-        .fileReader-controls {
+        .reader-controls {
             display: flex;
             gap: 16px;
             align-items: center;
@@ -370,7 +371,7 @@
             font-size: 14px;
         }
 
-        .close-fileReader {
+        .close-reader {
             background: transparent;
             border: none;
             color: #eaeaea;
@@ -381,55 +382,34 @@
             transition: all 0.3s ease;
         }
 
-        .close-fileReader:hover {
+        .close-reader:hover {
             background: #e94560;
         }
 
-        .fileReader-content {
+        .reader-content {
             flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
-            position: relative;
+            overflow: auto;
+            padding: 20px;
         }
 
         .pdf-container {
             position: relative;
             max-height: calc(100vh - 120px);
-            max-width: 100%;
         }
 
         #pdf-canvas {
             max-width: 100%;
-            max-height: calc(100vh - 120px);
             box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
 
-        .page-animation {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            pointer-events: none;
-        }
-
-        .page-animation canvas {
-            position: absolute;
-            max-width: 100%;
-            max-height: calc(100vh - 120px);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-        }
-
-        .page-enter {
+        .slide-in {
             animation: slideIn 0.3s ease;
         }
 
-        .page-exit {
+        .slide-out {
             animation: slideOut 0.3s ease;
         }
 
@@ -491,6 +471,14 @@
 
         .storage-warning.show {
             display: block;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: #888;
         }
     </style>
 </head>
@@ -555,20 +543,20 @@
         </main>
     </div>
 
-    <div class="fileReader" id="fileReader">
-        <div class="fileReader-header">
-            <div class="fileReader-title" id="fileReader-title">Book Title</div>
-            <div class="fileReader-controls">
+    <div class="reader" id="reader">
+        <div class="reader-header">
+            <div class="reader-title" id="reader-title">Book Title</div>
+            <div class="reader-controls">
                 <div class="page-nav">
-                    <button id="prev-btn" title="Previous page (←)">←</button>
+                    <button id="prev-btn" title="Previous page (←)">&#8592;</button>
                     <input type="number" class="page-input" id="page-input" min="1">
                     <span class="page-total">/ <span id="page-total">0</span></span>
-                    <button id="next-btn" title="Next page (→)">→</button>
+                    <button id="next-btn" title="Next page (&#8594;)">&#8594;</button>
                 </div>
-                <button class="close-fileReader" id="close-fileReader" title="Close (Esc)">×</button>
+                <button class="close-reader" id="close-reader" title="Close (Esc)">&#215;</button>
             </div>
         </div>
-        <div class="fileReader-content">
+        <div class="reader-content">
             <div class="pdf-container">
                 <canvas id="pdf-canvas"></canvas>
             </div>
@@ -578,9 +566,7 @@
     <div class="error-toast" id="error-toast"></div>
 
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        const STORAGE_KEY = 'pdf_book_fileReader_data';
+        const STORAGE_KEY = 'pdf_book_reader_data';
         const MAX_STORAGE_MB = 50;
 
         let books = [];
@@ -588,21 +574,57 @@
         let currentPage = 1;
         let totalPages = 0;
         let pdfDoc = null;
+        let pdfJsLoaded = false;
 
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const booksGrid = document.getElementById('books-grid');
         const historyList = document.getElementById('history-list');
-        const fileReaderEl = document.getElementById('fileReader');
-        const fileReaderTitle = document.getElementById('fileReader-title');
+        const reader = document.getElementById('reader');
+        const readerTitle = document.getElementById('reader-title');
         const pageInput = document.getElementById('page-input');
-        const pageTotal = document.getElementById('page-total');
+        const pageTotalEl = document.getElementById('page-total');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
-        const closeReader = document.getElementById('close-fileReader');
+        const closeReaderBtn = document.getElementById('close-reader');
         const pdfCanvas = document.getElementById('pdf-canvas');
         const errorToast = document.getElementById('error-toast');
         const storageWarning = document.getElementById('storage-warning');
+
+        async function loadPdfJs() {
+            if (typeof pdfjsLib !== 'undefined') {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/package/build/pdf.worker.min.js';
+                pdfJsLoaded = true;
+                return;
+            }
+
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'pdfjs/package/build/pdf.min.js';
+                    script.onload = () => {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/package/build/pdf.worker.min.js';
+                        pdfJsLoaded = true;
+                        resolve();
+                    };
+                    script.onerror = () => reject(new Error('Failed to load PDF.js'));
+                    document.head.appendChild(script);
+                });
+            } catch (e) {
+                try {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                    script.onload = () => {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                        pdfJsLoaded = true;
+                    };
+                    script.onerror = () => showError('Failed to load PDF library');
+                    document.head.appendChild(script);
+                } catch (e2) {
+                    showError('Failed to load PDF library');
+                }
+            }
+        }
 
         function loadBooks() {
             try {
@@ -652,18 +674,18 @@
 
         async function processFile(file) {
             return new Promise((resolve, reject) => {
-                const fileReader = new FileReader();
-                fileReader.onload = async (e) => {
+                const fr = new FileReader();
+                fr.onload = async function(e) {
                     try {
-                        const pdfData = e.target.result;
-                        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                        const typedarray = new Uint8Array(e.target.result);
+                        const pdf = await pdfjsLib.getDocument(typedarray).promise;
                         
-                        const thumbnail = await generateThumbnail(pdf, pdfData);
+                        const thumbnail = await generateThumbnail(pdf);
                         
                         const book = {
                             id: generateId(),
                             title: getFileName(file),
-                            pdfData: pdfData,
+                            pdfData: Array.from(typedarray),
                             thumbnail: thumbnail,
                             addedDate: Date.now(),
                             lastRead: null,
@@ -676,12 +698,12 @@
                         reject(new Error(`Failed to process ${file.name}: ${err.message}`));
                     }
                 };
-                fileReader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-                fileReader.readAsArrayBuffer(file);
+                fr.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+                fr.readAsArrayBuffer(file);
             });
         }
 
-        async function generateThumbnail(pdf, pdfData) {
+        async function generateThumbnail(pdf) {
             try {
                 const page = await pdf.getPage(1);
                 const scale = 0.5;
@@ -703,6 +725,10 @@
         }
 
         async function handleFiles(files) {
+            if (!pdfJsLoaded) {
+                await loadPdfJs();
+            }
+            
             const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
             
             if (pdfFiles.length === 0) {
@@ -726,7 +752,9 @@
 
         uploadArea.addEventListener('click', () => fileInput.click());
         
-        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+        fileInput.addEventListener('change', async (e) => {
+            await handleFiles(e.target.files);
+        });
 
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -775,7 +803,7 @@
                     <div class="book-cover">
                         ${book.thumbnail 
                             ? `<img src="${book.thumbnail}" alt="${book.title}">`
-                            : `<div class="placeholder">📖</div>`
+                            : `<div class="placeholder">&#128214;</div>`
                         }
                     </div>
                     <div class="book-info">
@@ -804,7 +832,7 @@
             if (historyBooks.length === 0) {
                 empty.style.display = 'block';
                 historyList.innerHTML = '';
-                historyList.appendChild(empty);
+                historyList.appendChild(empty.cloneNode(true));
                 return;
             }
             
@@ -814,7 +842,7 @@
                 <div class="history-item" data-id="${book.id}">
                     <div class="history-item-info">
                         <h3>${book.title}</h3>
-                        <p>Page ${book.currentPage} of ${book.totalPages} • Last read: ${formatDate(book.lastRead)}</p>
+                        <p>Page ${book.currentPage} of ${book.totalPages} &bull; Last read: ${formatDate(book.lastRead)}</p>
                     </div>
                     <div class="history-item-actions">
                         <button class="btn btn-primary resume-btn" data-id="${book.id}">Continue</button>
@@ -848,27 +876,32 @@
 
         async function openBook(id) {
             const book = books.find(b => b.id === id);
-            if (!book) return;
+            if (!book) {
+                showError('Book not found');
+                return;
+            }
             
             currentBook = book;
             currentPage = book.currentPage || 1;
             
             try {
-                pdfDoc = await pdfjsLib.getDocument({ data: book.pdfData }).promise;
+                const pdfData = new Uint8Array(book.pdfData);
+                pdfDoc = await pdfjsLib.getDocument(pdfData).promise;
                 totalPages = pdfDoc.numPages;
                 
-                fileReaderTitle.textContent = book.title;
-                pageTotal.textContent = totalPages;
+                readerTitle.textContent = book.title;
+                pageTotalEl.textContent = totalPages;
                 pageInput.max = totalPages;
                 pageInput.value = currentPage;
                 
                 updateNavButtons();
                 await renderPage(currentPage, true);
                 
-                fileReader.classList.add('open');
+                reader.classList.add('open');
                 document.body.style.overflow = 'hidden';
             } catch (e) {
-                showError('Failed to load PDF');
+                console.error('Failed to load PDF:', e);
+                showError('Failed to load PDF: ' + e.message);
             }
         }
 
@@ -880,34 +913,40 @@
         async function renderPage(pageNum, immediate = false) {
             if (!pdfDoc) return;
             
-            const page = await pdfDoc.getPage(pageNum);
-            const scale = 1.5;
-            const viewport = page.getViewport({ scale });
-            
-            pdfCanvas.width = viewport.width;
-            pdfCanvas.height = viewport.height;
-            
-            await page.render({
-                canvasContext: pdfCanvas.getContext('2d'),
-                viewport: viewport
-            }).promise;
-            
-            if (!immediate) {
-                animatePageTransition();
+            try {
+                const page = await pdfDoc.getPage(pageNum);
+                const scale = 1.5;
+                const viewport = page.getViewport({ scale });
+                
+                pdfCanvas.width = viewport.width;
+                pdfCanvas.height = viewport.height;
+                
+                const ctx = pdfCanvas.getContext('2d');
+                await page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                }).promise;
+                
+                if (!immediate) {
+                    animatePageTransition();
+                }
+                
+                pageInput.value = pageNum;
+                updateNavButtons();
+                
+                currentBook.currentPage = pageNum;
+                currentBook.lastRead = Date.now();
+                saveBooks();
+            } catch (e) {
+                console.error('Error rendering page:', e);
+                showError('Error rendering page: ' + e.message);
             }
-            
-            pageInput.value = pageNum;
-            updateNavButtons();
-            
-            currentBook.currentPage = pageNum;
-            currentBook.lastRead = Date.now();
-            saveBooks();
         }
 
         function animatePageTransition() {
-            pdfCanvas.style.animation = 'none';
-            pdfCanvas.offsetHeight;
-            pdfCanvas.style.animation = 'slideIn 0.3s ease';
+            pdfCanvas.classList.remove('slide-in', 'slide-out');
+            void pdfCanvas.offsetWidth;
+            pdfCanvas.classList.add('slide-in');
         }
 
         async function goToPage(pageNum) {
@@ -920,29 +959,33 @@
         nextBtn.addEventListener('click', () => goToPage(currentPage + 1));
 
         pageInput.addEventListener('change', () => {
-            goToPage(parseInt(pageInput.value));
+            const page = parseInt(pageInput.value);
+            if (!isNaN(page)) {
+                goToPage(page);
+            }
         });
 
-        closeReader.addEventListener('click', () => {
-            fileReader.classList.remove('open');
+        closeReaderBtn.addEventListener('click', () => {
+            reader.classList.remove('open');
             document.body.style.overflow = '';
             pdfDoc = null;
             renderLibrary();
         });
 
         document.addEventListener('keydown', (e) => {
-            if (!fileReader.classList.contains('open')) return;
+            if (!reader.classList.contains('open')) return;
             
             if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                 goToPage(currentPage - 1);
             } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                 goToPage(currentPage + 1);
             } else if (e.key === 'Escape') {
-                closeReader.click();
+                closeReaderBtn.click();
             }
         });
 
         loadBooks();
+        loadPdfJs();
         renderLibrary();
     </script>
 </body>
