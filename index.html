@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Book Reader</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #1a1a2e;
+            color: #eaeaea;
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: #16213e;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #e94560;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab {
+            padding: 10px 24px;
+            background: transparent;
+            border: none;
+            color: #eaeaea;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            background: #0f3460;
+        }
+
+        .tab.active {
+            background: #e94560;
+            color: #fff;
+        }
+
+        main {
+            flex: 1;
+            padding: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        .upload-section {
+            margin-bottom: 32px;
+        }
+
+        .upload-area {
+            border: 3px dashed #0f3460;
+            border-radius: 16px;
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #16213e;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #e94560;
+            background: #1a1a2e;
+        }
+
+        .upload-area svg {
+            width: 64px;
+            height: 64px;
+            color: #e94560;
+            margin-bottom: 16px;
+        }
+
+        .upload-area p {
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+
+        .upload-area .hint {
+            font-size: 12px;
+            color: #666;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .books-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 24px;
+        }
+
+        .book-card {
+            background: #16213e;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .book-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        .book-cover {
+            height: 160px;
+            background: #0f3460;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .book-cover canvas {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .book-cover .placeholder {
+            font-size: 48px;
+            color: #e94560;
+        }
+
+        .book-info {
+            padding: 16px;
+        }
+
+        .book-title {
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 8px;
+        }
+
+        .book-meta {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #0f3460;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #f39c12);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .history-item {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .history-item-info h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .history-item-info p {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .history-item-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #e94560;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #d63a54;
+        }
+
+        .btn-secondary {
+            background: #0f3460;
+            color: #eaeaea;
+        }
+
+        .btn-secondary:hover {
+            background: #1a4a7a;
+        }
+
+        .btn-danger {
+            background: #c0392b;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #a93226;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: #666;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            color: #444;
+        }
+
+        .fileReader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1a2e;
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+        }
+
+        .fileReader.open {
+            display: flex;
+        }
+
+        .fileReader-header {
+            background: #16213e;
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .fileReader-title {
+            font-size: 18px;
+            font-weight: 600;
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fileReader-controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .page-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .page-nav button {
+            background: #0f3460;
+            border: none;
+            color: #eaeaea;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .page-nav button:hover:not(:disabled) {
+            background: #e94560;
+        }
+
+        .page-nav button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-input {
+            width: 60px;
+            padding: 8px;
+            background: #0f3460;
+            border: none;
+            color: #eaeaea;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .page-input:focus {
+            outline: 2px solid #e94560;
+        }
+
+        .page-total {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .close-fileReader {
+            background: transparent;
+            border: none;
+            color: #eaeaea;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .close-fileReader:hover {
+            background: #e94560;
+        }
+
+        .fileReader-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .pdf-container {
+            position: relative;
+            max-height: calc(100vh - 120px);
+            max-width: 100%;
+        }
+
+        #pdf-canvas {
+            max-width: 100%;
+            max-height: calc(100vh - 120px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        .page-animation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .page-animation canvas {
+            position: absolute;
+            max-width: 100%;
+            max-height: calc(100vh - 120px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        .page-enter {
+            animation: slideIn 0.3s ease;
+        }
+
+        .page-exit {
+            animation: slideOut 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+        }
+
+        .error-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #c0392b;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 2000;
+            display: none;
+        }
+
+        .error-toast.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .storage-warning {
+            background: #f39c12;
+            color: #1a1a2e;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .storage-warning.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header>
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                PDF Reader
+            </div>
+            <div class="tabs">
+                <button class="tab active" data-view="library">Library</button>
+                <button class="tab" data-view="history">History</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="library-view" class="view active">
+                <div class="upload-section">
+                    <div class="storage-warning" id="storage-warning">
+                        Storage is nearly full. Consider deleting some books to free up space.
+                    </div>
+                    <div class="upload-area" id="upload-area">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p>Drop PDF files here or click to upload</p>
+                        <p class="hint">Supports single or bulk upload</p>
+                    </div>
+                    <input type="file" id="file-input" accept=".pdf" multiple>
+                </div>
+
+                <div class="books-grid" id="books-grid">
+                    <div class="empty-state" id="empty-library">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        </svg>
+                        <p>No books in your library</p>
+                        <p>Upload some PDFs to get started</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="history-view" class="view">
+                <div class="history-list" id="history-list">
+                    <div class="empty-state" id="empty-history">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <p>No reading history</p>
+                        <p>Books you read will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="fileReader" id="fileReader">
+        <div class="fileReader-header">
+            <div class="fileReader-title" id="fileReader-title">Book Title</div>
+            <div class="fileReader-controls">
+                <div class="page-nav">
+                    <button id="prev-btn" title="Previous page (←)">←</button>
+                    <input type="number" class="page-input" id="page-input" min="1">
+                    <span class="page-total">/ <span id="page-total">0</span></span>
+                    <button id="next-btn" title="Next page (→)">→</button>
+                </div>
+                <button class="close-fileReader" id="close-fileReader" title="Close (Esc)">×</button>
+            </div>
+        </div>
+        <div class="fileReader-content">
+            <div class="pdf-container">
+                <canvas id="pdf-canvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="error-toast" id="error-toast"></div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const STORAGE_KEY = 'pdf_book_fileReader_data';
+        const MAX_STORAGE_MB = 50;
+
+        let books = [];
+        let currentBook = null;
+        let currentPage = 1;
+        let totalPages = 0;
+        let pdfDoc = null;
+
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const booksGrid = document.getElementById('books-grid');
+        const historyList = document.getElementById('history-list');
+        const fileReaderEl = document.getElementById('fileReader');
+        const fileReaderTitle = document.getElementById('fileReader-title');
+        const pageInput = document.getElementById('page-input');
+        const pageTotal = document.getElementById('page-total');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const closeReader = document.getElementById('close-fileReader');
+        const pdfCanvas = document.getElementById('pdf-canvas');
+        const errorToast = document.getElementById('error-toast');
+        const storageWarning = document.getElementById('storage-warning');
+
+        function loadBooks() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                books = data ? JSON.parse(data) : [];
+                updateStorageWarning();
+            } catch (e) {
+                books = [];
+            }
+        }
+
+        function saveBooks() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+                updateStorageWarning();
+            } catch (e) {
+                showError('Storage is full. Please delete some books.');
+            }
+        }
+
+        function updateStorageWarning() {
+            const used = new Blob([JSON.stringify(books)]).size / (1024 * 1024);
+            storageWarning.classList.toggle('show', used > MAX_STORAGE_MB * 0.8);
+        }
+
+        function showError(message) {
+            errorToast.textContent = message;
+            errorToast.classList.add('show');
+            setTimeout(() => errorToast.classList.remove('show'), 3000);
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function getFileName(file) {
+            return file.name.replace(/\.pdf$/i, '');
+        }
+
+        function formatDate(date) {
+            return new Date(date).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        }
+
+        async function processFile(file) {
+            return new Promise((resolve, reject) => {
+                const fileReader = new FileReader();
+                fileReader.onload = async (e) => {
+                    try {
+                        const pdfData = e.target.result;
+                        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                        
+                        const thumbnail = await generateThumbnail(pdf, pdfData);
+                        
+                        const book = {
+                            id: generateId(),
+                            title: getFileName(file),
+                            pdfData: pdfData,
+                            thumbnail: thumbnail,
+                            addedDate: Date.now(),
+                            lastRead: null,
+                            currentPage: 1,
+                            totalPages: pdf.numPages
+                        };
+                        
+                        resolve(book);
+                    } catch (err) {
+                        reject(new Error(`Failed to process ${file.name}: ${err.message}`));
+                    }
+                };
+                fileReader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function generateThumbnail(pdf, pdfData) {
+            try {
+                const page = await pdf.getPage(1);
+                const scale = 0.5;
+                const viewport = page.getViewport({ scale });
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                await page.render({
+                    canvasContext: canvas.getContext('2d'),
+                    viewport: viewport
+                }).promise;
+                
+                return canvas.toDataURL('image/jpeg', 0.7);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function handleFiles(files) {
+            const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+            
+            if (pdfFiles.length === 0) {
+                showError('Please select PDF files');
+                return;
+            }
+
+            for (const file of pdfFiles) {
+                try {
+                    const book = await processFile(file);
+                    books.unshift(book);
+                } catch (e) {
+                    showError(e.message);
+                }
+            }
+            
+            saveBooks();
+            renderLibrary();
+            showView('library');
+        }
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                showView(tab.dataset.view);
+            });
+        });
+
+        function showView(view) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            
+            document.getElementById(`${view}-view`).classList.add('active');
+            document.querySelector(`[data-view="${view}"]`).classList.add('active');
+            
+            if (view === 'library') renderLibrary();
+            if (view === 'history') renderHistory();
+        }
+
+        function renderLibrary() {
+            const empty = document.getElementById('empty-library');
+            
+            if (books.length === 0) {
+                empty.style.display = 'block';
+                return;
+            }
+            
+            empty.style.display = 'none';
+            
+            const cards = books.map(book => `
+                <div class="book-card" data-id="${book.id}">
+                    <div class="book-cover">
+                        ${book.thumbnail 
+                            ? `<img src="${book.thumbnail}" alt="${book.title}">`
+                            : `<div class="placeholder">📖</div>`
+                        }
+                    </div>
+                    <div class="book-info">
+                        <div class="book-title">${book.title}</div>
+                        <div class="book-meta">
+                            ${book.lastRead ? `Last read: ${formatDate(book.lastRead)}` : `Added: ${formatDate(book.addedDate)}`}
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${(book.currentPage / book.totalPages) * 100}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            booksGrid.innerHTML = cards + `<div class="empty-state" id="empty-library" style="display:none"></div>`;
+            
+            document.querySelectorAll('.book-card').forEach(card => {
+                card.addEventListener('click', () => openBook(card.dataset.id));
+            });
+        }
+
+        function renderHistory() {
+            const empty = document.getElementById('empty-history');
+            const historyBooks = books.filter(b => b.lastRead);
+            
+            if (historyBooks.length === 0) {
+                empty.style.display = 'block';
+                historyList.innerHTML = '';
+                historyList.appendChild(empty);
+                return;
+            }
+            
+            empty.style.display = 'none';
+            
+            const items = historyBooks.map(book => `
+                <div class="history-item" data-id="${book.id}">
+                    <div class="history-item-info">
+                        <h3>${book.title}</h3>
+                        <p>Page ${book.currentPage} of ${book.totalPages} • Last read: ${formatDate(book.lastRead)}</p>
+                    </div>
+                    <div class="history-item-actions">
+                        <button class="btn btn-primary resume-btn" data-id="${book.id}">Continue</button>
+                        <button class="btn btn-danger delete-btn" data-id="${book.id}">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+            
+            historyList.innerHTML = items;
+            
+            document.querySelectorAll('.resume-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openBook(btn.dataset.id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteBook(btn.dataset.id);
+                });
+            });
+        }
+
+        function deleteBook(id) {
+            books = books.filter(b => b.id !== id);
+            saveBooks();
+            renderHistory();
+        }
+
+        async function openBook(id) {
+            const book = books.find(b => b.id === id);
+            if (!book) return;
+            
+            currentBook = book;
+            currentPage = book.currentPage || 1;
+            
+            try {
+                pdfDoc = await pdfjsLib.getDocument({ data: book.pdfData }).promise;
+                totalPages = pdfDoc.numPages;
+                
+                fileReaderTitle.textContent = book.title;
+                pageTotal.textContent = totalPages;
+                pageInput.max = totalPages;
+                pageInput.value = currentPage;
+                
+                updateNavButtons();
+                await renderPage(currentPage, true);
+                
+                fileReader.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            } catch (e) {
+                showError('Failed to load PDF');
+            }
+        }
+
+        function updateNavButtons() {
+            prevBtn.disabled = currentPage <= 1;
+            nextBtn.disabled = currentPage >= totalPages;
+        }
+
+        async function renderPage(pageNum, immediate = false) {
+            if (!pdfDoc) return;
+            
+            const page = await pdfDoc.getPage(pageNum);
+            const scale = 1.5;
+            const viewport = page.getViewport({ scale });
+            
+            pdfCanvas.width = viewport.width;
+            pdfCanvas.height = viewport.height;
+            
+            await page.render({
+                canvasContext: pdfCanvas.getContext('2d'),
+                viewport: viewport
+            }).promise;
+            
+            if (!immediate) {
+                animatePageTransition();
+            }
+            
+            pageInput.value = pageNum;
+            updateNavButtons();
+            
+            currentBook.currentPage = pageNum;
+            currentBook.lastRead = Date.now();
+            saveBooks();
+        }
+
+        function animatePageTransition() {
+            pdfCanvas.style.animation = 'none';
+            pdfCanvas.offsetHeight;
+            pdfCanvas.style.animation = 'slideIn 0.3s ease';
+        }
+
+        async function goToPage(pageNum) {
+            if (pageNum < 1 || pageNum > totalPages) return;
+            currentPage = pageNum;
+            await renderPage(currentPage);
+        }
+
+        prevBtn.addEventListener('click', () => goToPage(currentPage - 1));
+        nextBtn.addEventListener('click', () => goToPage(currentPage + 1));
+
+        pageInput.addEventListener('change', () => {
+            goToPage(parseInt(pageInput.value));
+        });
+
+        closeReader.addEventListener('click', () => {
+            fileReader.classList.remove('open');
+            document.body.style.overflow = '';
+            pdfDoc = null;
+            renderLibrary();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!fileReader.classList.contains('open')) return;
+            
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                goToPage(currentPage - 1);
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                goToPage(currentPage + 1);
+            } else if (e.key === 'Escape') {
+                closeReader.click();
+            }
+        });
+
+        loadBooks();
+        renderLibrary();
+    </script>
+</body>
+</html>
